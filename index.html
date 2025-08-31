@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Dr Kembhavi's Disease/Vyadhi Data Tool</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    body { font-family: Arial; background: #0d1b2a; color: #e0e1dd; margin: 0; }
+    header, footer { background: #1b263b; padding: 20px; text-align: center; }
+    header h1, footer h3 { margin: 0; }
+    #search-bar { text-align: center; padding: 20px; }
+    input { padding: 10px; width: 300px; border-radius: 8px; border: none;}
+    button { padding: 10px 15px; margin-left: 10px; background: #415a77; color: white; border: none; border-radius: 8px; cursor: pointer; }
+    .card { background: #1b263b; margin: 20px; padding: 20px; border-radius: 12px; box-shadow: 0 4px 8px rgba(0,0,0,0.4); }
+    .card h2 { color: #a9def9; }
+    ul { padding-left: 20px; }
+    canvas { background: white; border-radius: 8px; padding: 10px; margin-top: 10px; }
+    #pdf-btn { margin: 20px auto; display: block; padding: 10px 20px; background: #e63946; color: white; border: none; border-radius: 8px; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Dr Kembhavi’s Disease/Vyadhi Data Tool</h1>
+    <p>Developed by Astanga Wellness Pvt Ltd, Hubli, Karnataka, India</p>
+    <p><em>Integrating Ayurveda & Modern Science for Complete Health Insights</em></p>
+  </header>
+
+  <section id="search-bar">
+    <input type="text" id="diseaseInput" placeholder="Enter disease name…">
+    <button onclick="searchDisease()">Search</button>
+  </section>
+
+  <div id="results"></div>
+  <button id="pdf-btn" onclick="downloadPDF()">Download Report as PDF</button>
+
+  <footer>
+    <h3>Disclaimer</h3>
+    <p>This tool is for educational use only. Data are aggregated from public sources. Not intended to replace professional medical advice.</p>
+  </footer>
+
+<script>
+async function searchDisease() {
+  const name = document.getElementById("diseaseInput").value;
+  if (!name) { alert("Please enter a disease"); return; }
+  document.getElementById("results").innerHTML = "<p>Loading…</p>";
+
+  // 👇 replace with your Render backend URL
+  const res = await fetch(`https://YOUR-RENDER-URL.onrender.com/api/disease?name=${encodeURIComponent(name)}`);
+  const data = await res.json();
+
+  document.getElementById("results").innerHTML = `
+    <div class="card"><h2>Overview</h2><p>${data.overview || "N/A"}</p></div>
+    <div class="card"><h2>Ayurveda Research</h2><ul>${data.ayurveda_research.map(l => `<li><a href="${l}" target="_blank">${l}</a></li>`).join("")}</ul></div>
+    <div class="card"><h2>Clinical Trials</h2><ul>${data.clinical_trials.map(l => `<li><a href="${l}" target="_blank">${l}</a></li>`).join("")}</ul></div>
+    <div class="card"><h2>PubMed Research</h2><ul>${data.pubmed.map(l => `<li><a href="${l}" target="_blank">${l}</a></li>`).join("")}</ul></div>
+    <div class="card"><h2>Statistics</h2>
+      <canvas id="prevChart"></canvas>
+      <canvas id="mortChart"></canvas>
+      <canvas id="dalyChart"></canvas>
+    </div>
+  `;
+
+  renderCharts(data.statistics);
+}
+
+function renderCharts(stats) {
+  if (stats.prevalence_trend.length) new Chart(document.getElementById("prevChart"), {
+    type: 'line', data: {
+      labels: stats.prevalence_trend.map(e => e.year),
+      datasets: [{ label: "Prevalence", data: stats.prevalence_trend.map(e => e.cases), borderColor: "cyan" }]
+    }
+  });
+
+  if (stats.mortality_trend.length) new Chart(document.getElementById("mortChart"), {
+    type: 'bar', data: {
+      labels: stats.mortality_trend.map(e => e.year),
+      datasets: [{ label: "Deaths", data: stats.mortality_trend.map(e => e.deaths), backgroundColor: "orange" }]
+    }
+  });
+
+  if (stats.dalys_trend.length) new Chart(document.getElementById("dalyChart"), {
+    type: 'line', data: {
+      labels: stats.dalys_trend.map(e => e.year),
+      datasets: [{ label: "DALYs", data: stats.dalys_trend.map(e => e.dalys), borderColor: "lightgreen" }]
+    }
+  });
+}
+
+function downloadPDF() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: "pt", format: "a4" });
+  doc.html(document.body, { callback: d => d.save("Disease_Report.pdf"), x: 10, y: 10 });
+}
+</script>
+</body>
+</html>
