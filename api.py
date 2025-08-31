@@ -14,6 +14,17 @@ app.add_middleware(
 
 WHO_BASE = "https://ghoapi.azureedge.net/api"
 
+# WHO Region Mapping (ISO codes → human-readable names)
+REGION_MAP = {
+    "AFR": "Africa",
+    "AMR": "Americas",
+    "SEARO": "South-East Asia",
+    "EURO": "Europe",
+    "WPRO": "Western Pacific",
+    "EMRO": "Eastern Mediterranean",
+    "WORLD": "Global"
+}
+
 @app.get("/")
 def root():
     """Root endpoint for quick check."""
@@ -80,7 +91,10 @@ def get_disease(name: str):
         if reg_res.ok:
             vals = reg_res.json().get("value", [])[:20]
             results["statistics"]["region_data"] = [
-                {"region": v.get("SpatialDim", "Unknown"), "value": float(v.get("NumericValue", 0))}
+                {
+                    "region": REGION_MAP.get(v.get("SpatialDim", "Unknown"), v.get("SpatialDim")),
+                    "value": float(v.get("NumericValue", 0))
+                }
                 for v in vals if v.get("SpatialDim") and v.get("NumericValue")
             ]
     except Exception as e:
