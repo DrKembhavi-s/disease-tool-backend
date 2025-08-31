@@ -1,6 +1,16 @@
+import requests
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSCORSMiddleware
 
 app = FastAPI()
+
+# Enable CORS so frontend (GitHub Pages) can call backend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.get("/")
 def root():
@@ -8,38 +18,61 @@ def root():
 
 @app.get("/api/disease")
 def get_disease(name: str):
-    return {
-        "overview": f"{name.capitalize()} is a sample disease overview from backend.",
+    results = {
+        "overview": f"{name.capitalize()} data dashboard",
         "pubmed": [
-            "https://pubmed.ncbi.nlm.nih.gov/123456/",
-            "https://pubmed.ncbi.nlm.nih.gov/789012/"
+            f"https://pubmed.ncbi.nlm.nih.gov/?term={name}"
         ],
         "ayurveda_research": [
-            "https://dharaonline.org/sample1",
-            "https://dharaonline.org/sample2"
+            f"https://dharaonline.org/Search.aspx?query={name}"
         ],
         "clinical_trials": [
-            "https://ctri.nic.in/sample1",
-            "https://ctri.nic.in/sample2"
+            f"https://ctri.nic.in/Clinicaltrials/advsearch.php?trial={name}"
         ],
         "statistics": {
-            "prevalence_trend": [
-                {"year": 2018, "cases": 100000},
-                {"year": 2019, "cases": 120000},
-                {"year": 2020, "cases": 90000},
-                {"year": 2021, "cases": 110000}
-            ],
-            "mortality_trend": [
-                {"year": 2018, "deaths": 2000},
-                {"year": 2019, "deaths": 2500},
-                {"year": 2020, "deaths": 1800},
-                {"year": 2021, "deaths": 2100}
-            ],
-            "dalys_trend": [
-                {"year": 2018, "dalys": 50000},
-                {"year": 2019, "dalys": 52000},
-                {"year": 2020, "dalys": 48000},
-                {"year": 2021, "dalys": 53000}
-            ]
+            "prevalence_trend": [],
+            "mortality_trend": [],
+            "dalys_trend": []
         }
     }
+
+    # WHO API base
+    WHO_BASE = "https://ghoapi.azureedge.net/api"
+
+    # Prevalence data
+    try:
+        prev_res = requests.get(f"{WHO_BASE}/WHOSIS_000001?$filter=contains(IndicatorName,'{name}')&$format=json")
+        if prev_res.ok:
+            vals = prev_res.json().get("value", [])[:10]
+            results["statistics"]["prevalence_trend"] = [
+                {"year": int(v.get("TimePeriod", 0)), "cases": float(v.get("NumericValue", 0))}
+                for v in vals if v.get("TimePeriod") and v.get("NumericValue")
+            ]
+    except Exception as e:
+        results["statistics"]["prevalence_trend"] = [{"year": 0, "cases": 0, "error": str(e)}]
+
+    # Mortality data
+    try:
+        mort_res = requests.get(f"{WHO_BASE}/WHOSIS_000018?$filter=contains(IndicatorName,'{name}')&$format=json")
+        if mort_res.ok:
+            vals = mort_res.json().get("value", [])[:10]
+            results["statistics"]["mortality_trend"] = [
+                {"year": int(v.get("TimePeriod", 0)), "deaths": float(v.get("NumericValue", 0))}
+                for v in vals if v.get("TimePeriod") and v.get("NumericValue")
+            ]
+    except Exception as e:
+        results["statistics"]["mortality_trend"] = [{"year": 0, "deaths": 0, "error": str(e)}]
+
+    # DALYs data
+    try:
+        daly_res = requests.get(f"{WHO_BASE}/DALY?$filter=contains(IndicatorName,'{name}')&$format=json")
+        if daly_res.ok:
+            vals = daly_res.json().get("value", [])[:10]
+            results["statistics"]["dalys_trend"] = [
+                {"year": int(v.get("TimePeriod", 0)), "dalys": float(v.get("NumericValue", 0))}
+                for v in vals if v.get("TimePeriod") and v.get("NumericValue")
+            ]
+    except Exception as e:
+        results["statistics"]["dalys_trend"] = [{"year": 0, "dalys": 0, "error": str(e)}]
+
+    return results
