@@ -14,7 +14,7 @@ app.add_middleware(
 
 WHO_BASE = "https://ghoapi.azureedge.net/api"
 
-# WHO Region Mapping (ISO codes → human-readable names)
+# WHO Region Mapping
 REGION_MAP = {
     "AFR": "Africa",
     "AMR": "Americas",
@@ -25,12 +25,53 @@ REGION_MAP = {
     "WORLD": "Global"
 }
 
+# Mapping disease keywords to WHO indicator codes
+DISEASE_MAP = {
+    "anemia": {
+        "prevalence": "WHS9_90",   # Anaemia prevalence in women (15–49 years)
+        "mortality": None,
+        "dalys": None
+    },
+    "malaria": {
+        "prevalence": "MALARIA1",          # Reported malaria cases
+        "mortality": "MALARIA_DEATHS",     # Malaria deaths
+        "dalys": "DALY_MALARIA"            # DALYs due to malaria
+    },
+    "diabetes": {
+        "prevalence": "NCD_DIABETES_PREV", # Diabetes prevalence (age 18+)
+        "mortality": "NCD_DIABETES_MORT",  # Diabetes deaths
+        "dalys": "DALY_DIABETES"           # DALYs due to diabetes
+    },
+    "tuberculosis": {
+        "prevalence": "TB_cases",          # TB incidence
+        "mortality": "TB_mortality",       # TB mortality
+        "dalys": "DALY_TUBERCULOSIS"       # DALYs due to TB
+    },
+    "hiv": {
+        "prevalence": "HIV_prevalence",    # HIV prevalence
+        "mortality": "HIV_mortality",      # HIV deaths
+        "dalys": "DALY_HIV"                # DALYs due to HIV/AIDS
+    },
+    "hypertension": {
+        "prevalence": "NCD_HYPERTENSION",  # Hypertension prevalence (adults)
+        "mortality": "NCD_HYPERT_MORT",    # Hypertension-related deaths
+        "dalys": "DALY_HYPERTENSION"       # DALYs due to hypertension
+    },
+    "cancer": {
+        "prevalence": "CANCER_INCIDENCE",  # Cancer incidence
+        "mortality": "CANCER_MORTALITY",   # Cancer mortality
+        "dalys": "DALY_CANCER"             # DALYs due to cancer
+    }
+}
+
+
 @app.get("/")
 def root():
     """Root endpoint for quick check."""
     return {
         "message": "✅ Backend is running! Use /api/disease?name=malaria to fetch data."
     }
+
 
 @app.get("/api/disease")
 def get_disease(name: str):
@@ -49,43 +90,49 @@ def get_disease(name: str):
         }
     }
 
-    # WHO Prevalence
-    try:
-        prev_res = requests.get(f"{WHO_BASE}/WHOSIS_000001?$filter=contains(IndicatorName,'{name}')&$format=json")
-        if prev_res.ok:
-            vals = prev_res.json().get("value", [])[:10]
-            results["statistics"]["prevalence_trend"] = [
-                {"year": int(v.get("TimePeriod", 0)), "cases": float(v.get("NumericValue", 0))}
-                for v in vals if v.get("TimePeriod") and v.get("NumericValue")
-            ]
-    except Exception as e:
-        results["statistics"]["prevalence_trend"] = [{"year": 0, "cases": 0, "error": str(e)}]
+    # Check if disease is mapped
+    indicator = DISEASE_MAP.get(name.lower(), {})
 
-    # WHO Mortality
-    try:
-        mort_res = requests.get(f"{WHO_BASE}/WHOSIS_000018?$filter=contains(IndicatorName,'{name}')&$format=json")
-        if mort_res.ok:
-            vals = mort_res.json().get("value", [])[:10]
-            results["statistics"]["mortality_trend"] = [
-                {"year": int(v.get("TimePeriod", 0)), "deaths": float(v.get("NumericValue", 0))}
-                for v in vals if v.get("TimePeriod") and v.get("NumericValue")
-            ]
-    except Exception as e:
-        results["statistics"]["mortality_trend"] = [{"year": 0, "deaths": 0, "error": str(e)}]
+    # Prevalence
+    if indicator.get("prevalence"):
+        try:
+            prev_res = requests.get(f"{WHO_BASE}/{indicator['prevalence']}?$format=json")
+            if prev_res.ok:
+                vals = prev_res.json().get("value", [])[:10]
+                results["statistics"]["prevalence_trend"] = [
+                    {"year": int(v.get("TimeDim", 0)), "cases": float(v.get("NumericValue", 0))}
+                    for v in vals if v.get("TimeDim") and v.get("NumericValue")
+                ]
+        except Exception as e:
+            results["statistics"]["prevalence_trend"] = [{"year": 0, "cases": 0, "error": str(e)}]
 
-    # WHO DALYs
-    try:
-        daly_res = requests.get(f"{WHO_BASE}/DALY?$filter=contains(IndicatorName,'{name}')&$format=json")
-        if daly_res.ok:
-            vals = daly_res.json().get("value", [])[:10]
-            results["statistics"]["dalys_trend"] = [
-                {"year": int(v.get("TimePeriod", 0)), "dalys": float(v.get("NumericValue", 0))}
-                for v in vals if v.get("TimePeriod") and v.get("NumericValue")
-            ]
-    except Exception as e:
-        results["statistics"]["dalys_trend"] = [{"year": 0, "dalys": 0, "error": str(e)}]
+    # Mortality
+    if indicator.get("mortality"):
+        try:
+            mort_res = requests.get(f"{WHO_BASE}/{indicator['mortality']}?$format=json")
+            if mort_res.ok:
+                vals = mort_res.json().get("value", [])[:10]
+                results["statistics"]["mortality_trend"] = [
+                    {"year": int(v.get("TimeDim", 0)), "deaths": float(v.get("NumericValue", 0))}
+                    for v in vals if v.get("TimeDim") and v.get("NumericValue")
+                ]
+        except Exception as e:
+            results["statistics"]["mortality_trend"] = [{"year": 0, "deaths": 0, "error": str(e)}]
 
-    # WHO Regional Breakdown
+    # DALYs
+    if indicator.get("dalys"):
+        try:
+            daly_res = requests.get(f"{WHO_BASE}/{indicator['dalys']}?$format=json")
+            if daly_res.ok:
+                vals = daly_res.json().get("value", [])[:10]
+                results["statistics"]["dalys_trend"] = [
+                    {"year": int(v.get("TimeDim", 0)), "dalys": float(v.get("NumericValue", 0))}
+                    for v in vals if v.get("TimeDim") and v.get("NumericValue")
+                ]
+        except Exception as e:
+            results["statistics"]["dalys_trend"] = [{"year": 0, "dalys": 0, "error": str(e)}]
+
+    # WHO Regional Breakdown (generic attempt)
     try:
         reg_res = requests.get(f"{WHO_BASE}/GHO?$filter=contains(IndicatorName,'{name}')&$format=json")
         if reg_res.ok:
@@ -100,7 +147,7 @@ def get_disease(name: str):
     except Exception as e:
         results["statistics"]["region_data"] = [{"region": "Error", "value": 0, "error": str(e)}]
 
-    # WHO Age & Sex Breakdown
+    # WHO Age & Sex Breakdown (generic attempt)
     try:
         age_res = requests.get(f"{WHO_BASE}/GHO?$filter=contains(IndicatorName,'{name}')&$format=json")
         if age_res.ok:
