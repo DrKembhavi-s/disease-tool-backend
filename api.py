@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 
-# Enable CORS for frontend
+# Enable CORS for GitHub Pages frontend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -16,10 +16,14 @@ WHO_BASE = "https://ghoapi.azureedge.net/api"
 
 @app.get("/")
 def root():
-    return {"message": "Backend is running! Use /api/disease?name=malaria"}
+    """Root endpoint for quick check."""
+    return {
+        "message": "✅ Backend is running! Use /api/disease?name=malaria to fetch data."
+    }
 
 @app.get("/api/disease")
 def get_disease(name: str):
+    """Fetch disease data from WHO, PubMed, DHARA, CTRI."""
     results = {
         "overview": f"{name.capitalize()} data dashboard",
         "pubmed": [f"https://pubmed.ncbi.nlm.nih.gov/?term={name}"],
@@ -34,7 +38,7 @@ def get_disease(name: str):
         }
     }
 
-    # WHO Prevalence trend
+    # WHO Prevalence
     try:
         prev_res = requests.get(f"{WHO_BASE}/WHOSIS_000001?$filter=contains(IndicatorName,'{name}')&$format=json")
         if prev_res.ok:
@@ -46,7 +50,7 @@ def get_disease(name: str):
     except Exception as e:
         results["statistics"]["prevalence_trend"] = [{"year": 0, "cases": 0, "error": str(e)}]
 
-    # WHO Mortality trend
+    # WHO Mortality
     try:
         mort_res = requests.get(f"{WHO_BASE}/WHOSIS_000018?$filter=contains(IndicatorName,'{name}')&$format=json")
         if mort_res.ok:
@@ -74,12 +78,9 @@ def get_disease(name: str):
     try:
         reg_res = requests.get(f"{WHO_BASE}/GHO?$filter=contains(IndicatorName,'{name}')&$format=json")
         if reg_res.ok:
-            vals = reg_res.json().get("value", [])[:10]
+            vals = reg_res.json().get("value", [])[:20]
             results["statistics"]["region_data"] = [
-                {
-                    "region": v.get("SpatialDim", "Unknown"),
-                    "value": float(v.get("NumericValue", 0))
-                }
+                {"region": v.get("SpatialDim", "Unknown"), "value": float(v.get("NumericValue", 0))}
                 for v in vals if v.get("SpatialDim") and v.get("NumericValue")
             ]
     except Exception as e:
@@ -89,16 +90,18 @@ def get_disease(name: str):
     try:
         age_res = requests.get(f"{WHO_BASE}/GHO?$filter=contains(IndicatorName,'{name}')&$format=json")
         if age_res.ok:
-            vals = age_res.json().get("value", [])[:20]
+            vals = age_res.json().get("value", [])[:30]
             results["statistics"]["age_sex_data"] = [
                 {
-                    "age_group": v.get("Dim1", "All ages"),  # WHO uses Dim1 for age group
-                    "sex": v.get("Dim2", "Both sexes"),      # WHO uses Dim2 for sex
+                    "age_group": v.get("Dim1", "All ages"),   # WHO: Dim1 = Age group
+                    "sex": v.get("Dim2", "Both sexes"),       # WHO: Dim2 = Sex
                     "value": float(v.get("NumericValue", 0))
                 }
                 for v in vals if v.get("NumericValue")
             ]
     except Exception as e:
-        results["statistics"]["age_sex_data"] = [{"age_group": "Error", "sex": "Error", "value": 0, "error": str(e)}]
+        results["statistics"]["age_sex_data"] = [
+            {"age_group": "Error", "sex": "Error", "value": 0, "error": str(e)}
+        ]
 
     return results
